@@ -23,6 +23,7 @@ static constexpr long   SAMPLE_PERIOD_NS = 1000000000L / SAMPLE_RATE;
 static mpg123_handle* mh;
 
 std::vector<uint32_t> pcm_data;
+
 bool fifo_full(volatile uint32_t* hps_base) {
     const uint32_t csr_offset = 0x1000;
     const uint32_t status_offset = 4;
@@ -51,17 +52,18 @@ void write_fifo(volatile uint32_t* ptr, uint32_t data) {
 bool stop_playing(volatile uint32_t* ptr) {
     // if (*ptr != 3)
         // std::cout << "stop playing: " << std::hex << *ptr << std::endl;
+    bool stop_playing = ((*ptr & 0b11) != 0b11);
     return *ptr;
 }
 
 bool should_play_next(uint32_t val) {
-    bool play_next = ~val & 1;
+    bool play_next = ~val & 0b1;
     // if (play_next) std::cout << "requested play next" << std::endl;
     return play_next;
 }
 
 bool should_play_prev(uint32_t val) {
-    bool play_prev = ~val & 2;
+    bool play_prev = ~val & 0b10;
     // if (play_prev) std::cout << "requested play prev" << std::endl;
     return play_prev;
 }
@@ -147,10 +149,11 @@ int main(int argc, char** argv) {
         if (load_song(curr_song) < 0) break;
         std::cout << "loaded song" << std::endl;
         // std::cout << "pcm data size: " << pcm_data.size() << std::endl;
-        for(size_t i = 0; i + 1 < pcm_data.size(); i+=2) {
+        size_t i = 0;
+        while(i + 1 < pcm_data.size()) {
             // Check if a song change pio has been enabled
             uint32_t val;
-            if ((val = stop_playing(lwhps)) == 0) {
+            if ((val = stop_playing(lwhps)) == true) {
                 if (should_play_next(val)) {
                     curr_song = (curr_song + 1) % num_tracks;
                 } else if (should_play_prev(val)) {
@@ -167,16 +170,16 @@ int main(int argc, char** argv) {
             //  std::cout << "left: " << std::hex << pcm_data[i] << " right: " << pcm_data[i + 1] << std::dec << std::endl;
 
             // only write once both fifos are not full
-            while (fifo_full(hps));
+            if (fifo_full(hps)) continue;
             const uint32_t right_fifo_offset = 0x00010000;
-            while (fifo_full((uint32_t*)((uint8_t*)hps + right_fifo_offset)));
+            if (fifo_full((uint32_t*)((uint8_t*)hps + right_fifo_offset))) continue;;
 
             write_fifo(hps, left);
             write_fifo((uint32_t*)((uint8_t*)hps + right_fifo_offset), right);
             if (i + 3 >= pcm_data.size()) {
                 curr_song = (curr_song + 1) % num_tracks;
             }
-           
+            i += 2;
         }
 
         // // finished song play next
