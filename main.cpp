@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
                 if (should_play_next(val)) {
                     curr_song = (curr_song + 1) % num_tracks;
                 } else if (should_play_prev(val)) {
-                    curr_song = (curr_song - 1) % num_tracks;
+                    curr_song = (curr_song - 1 + num_tracks) % num_tracks;
                 }
                 std::cout << "changing song" << std::endl;
                 
