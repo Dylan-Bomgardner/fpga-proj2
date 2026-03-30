@@ -23,22 +23,19 @@ static constexpr long   SAMPLE_PERIOD_NS = 1000000000L / SAMPLE_RATE;
 static mpg123_handle* mh;
 
 std::vector<uint32_t> pcm_data;
+const char* base_file_path;
 
 bool fifo_full(volatile uint32_t* hps_base) {
     const uint32_t csr_offset = 0x1000;
     const uint32_t status_offset = 4;
-    // std::cout << "getting almost full" << std::endl;
+
     uint32_t almost_full = *(uint32_t*)((uint8_t*)hps_base + csr_offset + status_offset);
     almost_full = almost_full & 0x1;
-    // if (almost_full) 
-        // std::cout << "Almost Full: " << almost_full << std::endl;
     return (almost_full == 1);
 }
 
 void change_song(volatile uint32_t* ptr, uint32_t data) {
     // write song number to pio1
-    // std::cout << "ptr: " << (void*)ptr << std::endl;
-    // std::cout << "before change song" << std::endl;
     const uint32_t pio1_offset = 0x00010000;
     std::cout << std::hex << (void*)ptr + pio1_offset << std::endl;
     *(uint32_t*)((uint8_t*)ptr + pio1_offset) = data;
@@ -50,26 +47,21 @@ void write_fifo(volatile uint32_t* ptr, uint32_t data) {
 
 
 uint32_t stop_playing(volatile uint32_t* ptr) {
-    // if (*ptr != 3)
-        // std::cout << "stop playing: " << std::hex << *ptr << std::endl;
-    // bool stop_playing = ((*ptr & 0b11) != 0b11);
     return (*ptr & 0b11);
 }
 
 bool should_play_next(uint32_t val) {
     bool play_next = ~val & 0b1;
-    // if (play_next) std::cout << "requested play next" << std::endl;
     return play_next;
 }
 
 bool should_play_prev(uint32_t val) {
     bool play_prev = ~val & 0b10;
-    // if (play_prev) std::cout << "requested play prev" << std::endl;
     return play_prev;
 }
 
 int load_song(int track_number) {
-    std::string file_name = "/" + std::to_string(track_number);
+    std::string file_name = base_file_path + std::to_string(track_number);
     file_name = file_name + ".mp3";
     std::cout << "loading: " << file_name << std::endl;
 
@@ -105,8 +97,8 @@ int load_song(int track_number) {
 
 int main(int argc, char** argv) {
     // open memory device
-    if (argc < 2) {
-        std::cout << "Usage ./program <num tracks>" << std::endl;
+    if (argc < 3) {
+        std::cout << "Usage ./program <num tracks> <base file path>" << std::endl;
         return -1;
     }
     int num_tracks = atoi(argv[1]);
@@ -115,6 +107,8 @@ int main(int argc, char** argv) {
         perror("cannot access /dev/mem");
         return -1;
     }
+
+    base_file_path = argv[2];
 
 
     volatile uint32_t* hps = (uint32_t*) mmap(nullptr, (size_t)HPS_SIZE, 
@@ -146,7 +140,7 @@ int main(int argc, char** argv) {
         change_song(lwhps, curr_song);
         if (load_song(curr_song) < 0) break;
         std::cout << "loaded song" << std::endl;
-        // std::cout << "pcm data size: " << pcm_data.size() << std::endl;
+
         size_t i = 0;
         while(i + 1 < pcm_data.size()) {
             // Check if a song change pio has been enabled
@@ -162,10 +156,9 @@ int main(int argc, char** argv) {
                 // change song and restart
                 break;
             }
-            // std::cout << "loading left and right" << std::endl;
+
             const uint32_t left = pcm_data[i];
             const uint32_t right = pcm_data[i + 1];
-            //  std::cout << "left: " << std::hex << pcm_data[i] << " right: " << pcm_data[i + 1] << std::dec << std::endl;
 
             // only write once both fifos are not full
             if (fifo_full(hps)) continue;
