@@ -23,6 +23,18 @@ static constexpr long   SAMPLE_PERIOD_NS = 1000000000L / SAMPLE_RATE;
 static mpg123_handle* mh;
 
 std::vector<uint32_t> pcm_data;
+bool fifo_full(volatile uint32_t* hps_base) {
+    const uint32_t csr_offset = 0x1000;
+    const uint32_t almost_full_offset = 4;
+    uint32_t almost_full = *(hps_base + csr_offset + almost_full_offset);
+    return (almost_full == 1);
+}
+
+void change_song(volatile uint32_t* ptr, uint32_t data) {
+    // write song number to pio1
+    const uint32_t pio1_offset = 0x00010000;
+    *(ptr + pio1_offset) = data;
+}
 
 void write_fifo(volatile uint32_t* ptr, uint32_t data) {
     *ptr = data;
@@ -79,26 +91,26 @@ int main(int argc, char** argv) {
         return -1;
     }
     int num_tracks = atoi(argv[1]);
-    // int fd = open("/dev/mem", O_RDWR | O_SYNC);
-    // if (fd < 0) {
-    //     perror("cannot access /dev/mem");
-    //     return -1;
-    // }
+    int fd = open("/dev/mem", O_RDWR | O_SYNC);
+    if (fd < 0) {
+        perror("cannot access /dev/mem");
+        return -1;
+    }
 
-    // volatile uint32_t* hps = (uint32_t*) mmap(nullptr, (size_t)HPS_SIZE, 
-    //     PROT_READ | PROT_WRITE, MAP_SHARED, fd, LEFT_FIFO_BASE); 
-    // if (hps == nullptr) {
-    //     perror("error with mmap hps");
-    //     return -1;
-    // }
+    volatile uint32_t* hps = (uint32_t*) mmap(nullptr, (size_t)HPS_SIZE, 
+        PROT_READ | PROT_WRITE, MAP_SHARED, fd, LEFT_FIFO_BASE); 
+    if (hps == nullptr) {
+        perror("error with mmap hps");
+        return -1;
+    }
 
-    // volatile uint32_t* lwhps = (uint32_t*) mmap(nullptr, (size_t)HPS_SIZE, 
-    //     PROT_READ | PROT_WRITE, MAP_SHARED, fd, PIO0_BASE);
+    volatile uint32_t* lwhps = (uint32_t*) mmap(nullptr, (size_t)HPS_SIZE, 
+        PROT_READ | PROT_WRITE, MAP_SHARED, fd, PIO0_BASE);
 
-    // if (lwhps == nullptr) {
-    //     perror("error with mmap lwhps");
-    //     return -1;
-    // }
+    if (lwhps == nullptr) {
+        perror("error with mmap lwhps");
+        return -1;
+    }
 
     
     mpg123_init();
@@ -111,33 +123,35 @@ int main(int argc, char** argv) {
     int curr_song = 0;
     while(1) {
         mpg123_close(mh);
+
+        change_song(lwhps, curr_song);
         if (load_song(curr_song) < 0) break;
 
         for(size_t i = 0; i + 1 < pcm_data.size(); i+=2) {
-            // get status
-            // if (uint32_t val = stop_playing(lwhps)) {
-            //     if (should_play_next(val)) {
-            //         curr_song = (curr_song++) % num_tracks;
-            //     } else if (should_play_prev) {
-            //         curr_song = (curr_song--) % num_tracks;
-            //     }
-            //     std::cout << "changing song" << std::endl;
+            // Check if a song change pio has been enabled
+            if (uint32_t val = stop_playing(lwhps)) {
+                if (should_play_next(val)) {
+                    curr_song = (curr_song++) % num_tracks;
+                } else if (should_play_prev(val)) {
+                    curr_song = (curr_song--) % num_tracks;
+                }
+                std::cout << "changing song" << std::endl;
                 
-            //     break;
-            // }
+                // change song and restart
+                break;
+            }
+
             const uint32_t left = pcm_data[i];
             const uint32_t right = pcm_data[i + 1];
-            // write_fifo(hps, left);
-            // write_fifo(hps + 0x00010000, right);
+
+            // only write once both fifos are not full
+            while (fifo_full(hps));
+            const uint32_t right_fifo_offset = 0x00010000;
+            while (fifo_full(hps + right_fifo_offset));
+
+            write_fifo(hps, left);
+            write_fifo(hps + right_fifo_offset, right);
             std::cout << "left: " << std::hex << pcm_data[i] << " right: " << pcm_data[i + 1] << std::dec << std::endl;
-
-            next.tv_nsec += SAMPLE_PERIOD_NS;
-            if (next.tv_nsec >= 1000000000L) {
-                next.tv_nsec -= 1000000000L;
-                next.tv_sec++;
-            }
-            clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr);
-
         }
 
         // finished song play next
