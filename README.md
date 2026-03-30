@@ -1,5 +1,7 @@
 # fpga-proj2
-
+``` bash
+sudo apt-get install g++-arm-linux-gnueabihf
+```
 
 ``` bash
 wget https://www.mpg123.de/download/mpg123-1.32.5.tar.bz2
