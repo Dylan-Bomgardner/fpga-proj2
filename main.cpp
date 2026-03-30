@@ -49,11 +49,11 @@ void write_fifo(volatile uint32_t* ptr, uint32_t data) {
 }
 
 
-bool stop_playing(volatile uint32_t* ptr) {
+uint32_t stop_playing(volatile uint32_t* ptr) {
     // if (*ptr != 3)
         // std::cout << "stop playing: " << std::hex << *ptr << std::endl;
-    bool stop_playing = ((*ptr & 0b11) != 0b11);
-    return *ptr;
+    // bool stop_playing = ((*ptr & 0b11) != 0b11);
+    return (*ptr & 0b11);
 }
 
 bool should_play_next(uint32_t val) {
@@ -138,8 +138,6 @@ int main(int argc, char** argv) {
     mh = mpg123_new(nullptr, &err);
     if (!mh) { fprintf(stderr, "mpg123_new failed\n"); return 1; }
 
-    struct timespec next;
-    clock_gettime(CLOCK_MONOTONIC, &next);
     int curr_song = 0;
     while(1) {
         pcm_data.clear();
@@ -153,7 +151,7 @@ int main(int argc, char** argv) {
         while(i + 1 < pcm_data.size()) {
             // Check if a song change pio has been enabled
             uint32_t val;
-            if ((val = stop_playing(lwhps)) == true) {
+            if ((val = stop_playing(lwhps)) != 0b11) {
                 if (should_play_next(val)) {
                     curr_song = (curr_song + 1) % num_tracks;
                 } else if (should_play_prev(val)) {
