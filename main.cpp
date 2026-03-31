@@ -76,7 +76,7 @@ int load_song(int track_number) {
     size_t buffer_size = mpg123_outblock(mh);
     std::vector<uint8_t> buf(buffer_size);
 
-    std::cout << "loading: " << file_name << std::endl;
+    std::cout << "Loading: " << file_name << std::endl;
 
     // Decode the file in chunks and load into memory (vector)
     size_t bytes_decoded;
