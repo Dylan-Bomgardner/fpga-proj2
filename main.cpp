@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
 
         change_song(lwhps, curr_song);
         if (load_song(curr_song) < 0) break;
-        std::cout << "Playing Song" << std::endl;
+        std::cout << "Loaded Song" << std::endl;
 
         size_t i = 0;
         while(i + 1 < pcm_data.size()) {
