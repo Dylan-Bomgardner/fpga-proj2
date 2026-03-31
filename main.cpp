@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
 
         change_song(lwhps, curr_song);
         if (load_song(curr_song) < 0) break;
-        std::cout << "loaded song" << std::endl;
+        std::cout << "Loaded Song" << std::endl;
 
         size_t i = 0;
         while(i + 1 < pcm_data.size()) {
@@ -149,10 +149,11 @@ int main(int argc, char** argv) {
             if ((val = stop_playing(lwhps)) != 0b11) {
                 if (should_play_next(val)) {
                     curr_song = (curr_song + 1) % num_tracks;
+                    std::cout << "Playing Next" << std::endl;
                 } else if (should_play_prev(val)) {
                     curr_song = (curr_song - 1 + num_tracks) % num_tracks;
+                    std::cout << "Playing Previous" << std::endl;
                 }
-                std::cout << "changing song" << std::endl;
                 
                 // change song and restart
                 break;
