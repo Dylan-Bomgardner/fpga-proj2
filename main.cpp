@@ -37,7 +37,6 @@ bool fifo_full(volatile uint32_t* hps_base) {
 void change_song(volatile uint32_t* ptr, uint32_t data) {
     // write song number to pio1
     const uint32_t pio1_offset = 0x00010000;
-    std::cout << std::hex << (void*)ptr + pio1_offset << std::endl;
     *(uint32_t*)((uint8_t*)ptr + pio1_offset) = data;
 }
 
@@ -45,7 +44,7 @@ void write_fifo(volatile uint32_t* ptr, uint32_t data) {
     *ptr = data;
 }
 
-
+// PIOs are active low
 uint32_t stop_playing(volatile uint32_t* ptr) {
     return (*ptr & 0b11);
 }
@@ -63,14 +62,13 @@ bool should_play_prev(uint32_t val) {
 int load_song(int track_number) {
     std::string file_name = base_file_path + std::to_string(track_number);
     file_name = file_name + ".mp3";
-    std::cout << "loading: " << file_name << std::endl;
-
+    
     if (mpg123_open(mh, file_name.c_str()) != MPG123_OK) {
         fprintf(stderr, "Cannot open: %s\n", file_name.c_str());
         return -1;
     }
 
-    std::cout << "song opened" << std::endl;
+    std::cout << "Opening: " << file_name << std::endl;
 
     mpg123_format_none(mh);
     mpg123_format(mh, 48000, MPG123_STEREO, MPG123_ENC_SIGNED_24);
@@ -78,6 +76,9 @@ int load_song(int track_number) {
     size_t buffer_size = mpg123_outblock(mh);
     std::vector<uint8_t> buf(buffer_size);
 
+    std::cout << "loading: " << file_name << std::endl;
+
+    // Decode the file in chunks and load into memory (vector)
     size_t bytes_decoded;
     while (mpg123_read(mh, buf.data(), buffer_size, &bytes_decoded) == MPG123_OK) {
         // each sample is 3 bytes
@@ -110,7 +111,7 @@ int main(int argc, char** argv) {
 
     base_file_path = argv[2];
 
-
+    // Mapping virtual to physical memory
     volatile uint32_t* hps = (uint32_t*) mmap(nullptr, (size_t)HPS_SIZE, 
         PROT_READ | PROT_WRITE, MAP_SHARED, fd, LEFT_FIFO_BASE); 
     if (hps == MAP_FAILED) {
@@ -172,11 +173,6 @@ int main(int argc, char** argv) {
             }
             i += 2;
         }
-
-        // // finished song play next
-        // curr_song = (curr_song++) % num_tracks;
-
-
     }
 
     mpg123_close(mh);
